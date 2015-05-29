@@ -18,16 +18,18 @@ var evilChars = [' ', "\t", 'COM. ', '@', '$', ';'];
 
 var fs = require('fs');
 var ProgressBar = require('progress');
-var mongoose = require('mongoose');
+var mongoose = require('mongoose')
+  , Schema = mongoose.Schema;
 
 // MongoDB
 mongoose.connect(connString);
 
 // Zone data model
-var DomainModel = mongoose.model('domain', {
+var DomainSchema = new Schema({
     tld: String,
     name: String
-});
+}).index({ name: 1, tid: 1 }, { unique: true, dropDups: true });
+var DomainModel = mongoose.model('domain', DomainSchema);
 
 /**
 * Stores properly formed lines in the database
@@ -37,6 +39,10 @@ var storeLine = function(line) {
     if(!checkLine(line)) return;
     if(null !== (line = parseLine(line)))
         new DomainModel(line).save(function (err) {
+            // if the error is a duplicate entry error, move on to next record
+            if(err && err.code === 11000) return;
+            
+            // if the error is unknown, print it out to the console
             if(err) console.error(err);
         });
 }
