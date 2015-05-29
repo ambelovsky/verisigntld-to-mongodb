@@ -16,10 +16,18 @@ var evilChars = [' ', "\t", 'COM. ', '@', '$', ';'];
 
 /*** NO ADDITIONAL CONFIGURATION BELOW THIS LINE ***/
 
+// dedupe for arrays
+var uniqueArrayFilter = function(value, index, self) {
+    return self.indexOf(value) === index;
+}
+
+// includes
 var fs = require('fs');
 var ProgressBar = require('progress');
 var mongoose = require('mongoose')
   , Schema = mongoose.Schema;
+
+var lines = [];
 
 // MongoDB
 mongoose.connect(connString);
@@ -36,15 +44,16 @@ var DomainModel = mongoose.model('domain', DomainSchema);
 * @param line String
 **/
 var storeLine = function(line) {
-    if(!checkLine(line)) return;
-    if(null !== (line = parseLine(line)))
-        new DomainModel(line).save(function (err) {
-            // if the error is a duplicate entry error, move on to next record
-            if(err && err.code === 11000) return;
-            
-            // if the error is unknown, print it out to the console
-            if(err) console.error(err);
-        });
+    new DomainModel({
+        tld: tld,
+        name: line.toLowerCase()
+    }).save(function (err) {
+        // if the error is a duplicate entry error, move on to next record
+        if(err && err.code === 11000) return;
+        
+        // if the error is unknown, print it out to the console
+        if(err) console.error(err);
+    });
 }
 
 /**
@@ -58,6 +67,9 @@ var checkLine = function(line) {
         var char = evilChars[i];
         if(line.indexOf(char) === 0) return false;
     }
+  
+    dotTest = line.split(' ')[0];
+    if(dotTest.indexOf('.') > -1) return false;
     
     return true;
 };
@@ -65,39 +77,69 @@ var checkLine = function(line) {
 /**
 * Parses domain information out of NS lines
 * @param line String
-* @return { tld, name }
+* @return line String
 **/
 var parseLine = function(line) {
     line = line.split(' NS ')[0];
-    
-    return {
-        tld: tld,
-        name: line.toLowerCase()
-    };
+    return line.split(' ')[0];
 };
 
 // File stats for progress indicator
 var stats = fs.statSync(file);
 var fileSizeInBytes = stats["size"];
+var dupesDetected = 0;
+var linesProcessed = 0;
 
 // progress bar
 var green = '\u001b[42m \u001b[0m';
-var bar = new ProgressBar('  running |:bar| :percent :ethh :etmm', {
+var bar = new ProgressBar('  running |:bar| :percent :ethh :etmm (:dupes/:lines dedupes)', {
     complete: green,
     incomplete: ' ',
     width: 40,
     total: fileSizeInBytes
 });
 
+/**
+* Processes lines read from the zonefile
+**/
+var processLines = function(lines, last) {
+    last = !last ? 1 : 0;
+    cleanLines = [];
+  
+    // parse all lines
+    lines.forEach(function(line) {
+        if(!line) return;
+        if(!checkLine(line)) return;
+        if(null !== (parsedLine = parseLine(line)))
+            cleanLines.unshift(parsedLine);
+    });
+    lines = cleanLines;
+
+    // dedupe
+    var startingLen = lines.length;
+    linesProcessed += startingLen;
+    var unformedLine = lines.pop();
+    lines = lines.filter(uniqueArrayFilter);
+    lines.push(unformedLine);
+    dupesDetected += startingLen - lines.length;
+  
+    // shift lines off the array as we enter them into the database
+    // leave the last line alone in case it is still forming
+    while(lines.length > last) {
+        storeLine(lines.shift());
+    }
+  
+    return lines;
+};
+
 // Asynchronous file processing
 var fileIn = fs.createReadStream('../com.zone');
 fileIn.on('readable', function() {
     var chunk = null;
-    var lines = [];
     
     while(null !== (chunk = fileIn.read())) {
         var chunkStr = chunk.toString();
-        var currLine = lines.length == 0 ? 0 : linex.length - 1;
+        var currLine = lines.length == 0 ? 0 : lines.length - 1;
         
         // detect newline characters and split array elements thusly
         if(chunkStr.indexOf("\n") > -1) {
@@ -111,11 +153,7 @@ fileIn.on('readable', function() {
             }
         } else lines[currLine] += chunkStr;
         
-        // shift lines off the array as we enter them into the database
-        // leave the last line alone in case it is still forming
-        while(lines.length > 1)
-            storeLine(lines.shift());
-        
+        // update progress indicator
         var etm = ((bar.curr / bar.total * 100) == 100) ? 0 : (new Date - bar.start) * (bar.total / bar.curr - 1);
         etm = etm > 0 ? (etm / 1000 / 60) : 0;
         eth = etm / 60;
@@ -123,11 +161,15 @@ fileIn.on('readable', function() {
 
         bar.tick(chunk.length, {
             'etm': parseInt(etm, 10),
-            'eth': parseInt(eth, 10)
+            'eth': parseInt(eth, 10),
+            'dupes': dupesDetected,
+            'lines': linesProcessed
         });
+        
+        // process lines
+        lines = processLines(lines);
     }
     
     // take care of the last line when we know it's done forming
-    while(lines.length > 0)
-        storeLine(lines.shift());
+    processLines(lines, true);
 });
