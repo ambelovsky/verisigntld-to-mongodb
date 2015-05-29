@@ -14,7 +14,7 @@ var file = "../com.zone";
 var connString = 'mongodb://localhost/zone';
 
 // buffer overflow at (full) # of lines
-var full = 2000;
+var full = 5000;
 
 // lines beginning with these characters are parts of the zone file we don't want
 var evilChars = [' ', "\t", 'COM. ', '@', '$', ';'];
