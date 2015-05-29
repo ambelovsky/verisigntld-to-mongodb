@@ -6,6 +6,8 @@ Installation
 
 Run "npm install" under the project directory. This will pull down all necessary dependencies from npm.
 
+    npm install
+
 
 Configuration
 =============
@@ -20,4 +22,4 @@ Open process.js and set the following variables:
 Usage
 =====
 
-node process.js
+    node process.js
