@@ -1,0 +1,15 @@
+{
+  "name": "verisigntld",
+  "version": "0.0.1",
+  "description": "extracts verisign tld zone files into mongodb",
+  "main": "process.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "YAaron Belovsky <ambelovsky@gmail.com> (http://aaronbelovsky.com)",
+  "license": "MIT",
+  "dependencies": {
+    "mongoose": "^4.0.4",
+    "progress": "^1.1.8"
+  }
+}
