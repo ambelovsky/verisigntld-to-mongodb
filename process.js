@@ -1,3 +1,5 @@
+'strict mode';
+
 /***
 * Extracts domain names from verisign TLD zone files.
 * By default, entries are committed to a MongoDB instance.
@@ -10,6 +12,9 @@
 var tld = "com";
 var file = "../com.zone";
 var connString = 'mongodb://localhost/zone';
+
+// buffer overflow at (full) # of lines
+var full = 2000;
 
 // lines beginning with these characters are parts of the zone file we don't want
 var evilChars = [' ', "\t", 'COM. ', '@', '$', ';'];
@@ -28,6 +33,7 @@ var mongoose = require('mongoose')
   , Schema = mongoose.Schema;
 
 var lines = [];
+var drain = 0;
 
 // MongoDB
 mongoose.connect(connString);
@@ -48,6 +54,8 @@ var storeLine = function(line) {
         tld: tld,
         name: line.toLowerCase()
     }).save(function (err) {
+        drain--;
+    
         // if the error is a duplicate entry error, move on to next record
         if(err && err.code === 11000) return;
         
@@ -104,7 +112,7 @@ var bar = new ProgressBar('  running |:bar| :percent :ethh :etmm (:dupes/:lines 
 **/
 var processLines = function(lines, last) {
     last = !last ? 1 : 0;
-    cleanLines = [];
+    var cleanLines = [];
   
     // parse all lines
     lines.forEach(function(line) {
@@ -122,6 +130,7 @@ var processLines = function(lines, last) {
     lines = lines.filter(uniqueArrayFilter);
     lines.push(unformedLine);
     dupesDetected += startingLen - lines.length;
+    drain += lines.length;
   
     // shift lines off the array as we enter them into the database
     // leave the last line alone in case it is still forming
@@ -135,8 +144,16 @@ var processLines = function(lines, last) {
 // Asynchronous file processing
 var fileIn = fs.createReadStream('../com.zone');
 fileIn.on('readable', function() {
-    var chunk = null;
+    // overflow detection-ish
+    if(drain > full) {
+        fileIn.pause();
+        setTimeout(function() {
+          fileIn.resume();
+        }, 2000);
+        return;
+    }
     
+    var chunk = null;
     while(null !== (chunk = fileIn.read())) {
         var chunkStr = chunk.toString();
         var currLine = lines.length == 0 ? 0 : lines.length - 1;
