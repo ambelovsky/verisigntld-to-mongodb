@@ -1,6 +1,12 @@
 # verisigntld-to-mongodb
 Asynchronous processing of Verisign's TLD zone files to extract domain names and enter them into mongodb.
 
+Important
+=========
+
+This NodeJS version of the processing scripts are not stable. It's highly recommended that you use the Python
+version of these files at [github.com/ambelovsky/py-verisigntld-to-mongodb](https://github.com/ambelovsky/py-verisigntld-to-mongodb).
+
 Installation
 ============
 
